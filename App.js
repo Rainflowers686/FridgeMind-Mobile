@@ -10,6 +10,8 @@ import { LineChart } from 'react-native-gifted-charts';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
+import axios from 'axios';
+import { API_BASE_URL } from './config';
 
 // ==================== 1. 全局主题 ====================
 const theme = {
@@ -56,17 +58,51 @@ const AnimatedSwitch = ({ isClosed }) => {
   );
 };
 
-// ==================== 3. 监控大屏 ====================
-// ==================== 3. 监控大屏 ====================
+// ==================== 3. 监控大屏 (已接入后端实时轮询) ====================
 function DashboardScreen() {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
   const [visible, setIsVisible] = useState(false);
 
-  const fridgeData = { temp: '4.6', humi: '62', door: '已关', update: '刚刚', img: 'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?q=80&w=1000&auto=format&fit=crop' };
+  // 初始状态：显示加载中
+  const [fridgeData, setFridgeData] = useState({
+    temp: '--', humi: '--', door: '获取中...', update: '同步中...',
+    img: 'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?q=80&w=1000&auto=format&fit=crop'
+  });
+
+  // 🔌 核心：从后端拉取最新传感器日志
+  const fetchRealtimeData = async () => {
+    try {
+      // 请求后端 /api/sensor_logs 接口
+      const response = await axios.get(`${API_BASE_URL}/api/sensor_logs`);
+
+      // 假设后端返回的是一个数组，我们取第一条（最新的一条）
+      if (response.data && response.data.length > 0) {
+        const latestLog = response.data[0];
+
+        setFridgeData({
+          temp: latestLog.temperature != null ? latestLog.temperature.toFixed(1) : '--',
+          humi: latestLog.humidity != null ? latestLog.humidity.toFixed(0) : '--',
+          door: latestLog.door_status || '已关', // 如果后端没传，默认已关
+          update: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute:'2-digit', second:'2-digit' }),
+          // 拼接图片完整地址，如果后端返回的是相对路径，需要加上 API_BASE_URL
+          img: latestLog.image_path ? `${API_BASE_URL}${latestLog.image_path}` : fridgeData.img
+        });
+      }
+    } catch (error) {
+      console.warn("大屏数据拉取失败，请检查网络或后端服务:", error.message);
+    }
+  };
+
+  // 页面加载时执行一次，然后每隔 5 秒自动刷新一次
+  useEffect(() => {
+    fetchRealtimeData();
+    const interval = setInterval(fetchRealtimeData, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const tempColor = Number(fridgeData.temp) > 8 ? theme.colors.danger : theme.colors.primary;
 
-  // 卡片组件适配横排
   const StatusCard = ({ title, children, value, unit, color }) => (
     <View style={[styles.card, { width: isTablet ? '31%' : '100%', marginBottom: isTablet ? 0 : 16 }]}>
       <Text style={styles.cardLabel} numberOfLines={1}>{title}</Text>
@@ -87,18 +123,18 @@ function DashboardScreen() {
             <Ionicons name="snow" size={28} color={theme.colors.primary} />
             <Text style={styles.headerTitle}>FridgeMind AI</Text>
           </View>
-          <Ionicons name="person-circle" size={36} color={theme.colors.primary} />
+          <TouchableOpacity onPress={fetchRealtimeData}>
+             <Ionicons name="sync-circle" size={36} color={theme.colors.primary} />
+          </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={{padding: 16, paddingBottom: 40}} showsVerticalScrollIndicator={false}>
-
-          {/* 布局重构：改为全端统一的【上排网格卡片 + 下排全宽图片】 */}
           <View style={{ flexDirection: isTablet ? 'row' : 'column', justifyContent: 'space-between', marginBottom: 20 }}>
             <StatusCard title="内部温度" value={fridgeData.temp} unit="℃" color={tempColor}>
-              <CircularProgress value={fridgeData.temp} max={10} color={tempColor} icon="thermometer" />
+              <CircularProgress value={fridgeData.temp === '--' ? 0 : fridgeData.temp} max={10} color={tempColor} icon="thermometer" />
             </StatusCard>
             <StatusCard title="相对湿度" value={fridgeData.humi} unit="%" color={theme.colors.primary}>
-              <CircularProgress value={fridgeData.humi} max={100} color={theme.colors.primary} icon="water" />
+              <CircularProgress value={fridgeData.humi === '--' ? 0 : fridgeData.humi} max={100} color={theme.colors.primary} icon="water" />
             </StatusCard>
             <StatusCard title="舱门状态" value={fridgeData.door} unit="" color={fridgeData.door === '已关' ? theme.colors.success : theme.colors.danger}>
               <View style={{ height: 48, justifyContent: 'center' }}><AnimatedSwitch isClosed={fridgeData.door === '已关'} /></View>
@@ -113,12 +149,10 @@ function DashboardScreen() {
               </View>
               <View style={styles.badge}><Text style={styles.badgeText}>NPU 校正</Text></View>
             </View>
-
             <TouchableOpacity onPress={() => setIsVisible(true)} activeOpacity={0.9} style={{width: '100%'}}>
-              {/* 图片加固：为宽屏强制指定高度，防止渲染坍塌 */}
               <Image source={{ uri: fridgeData.img }} style={{ width: '100%', height: isTablet ? 480 : 220, resizeMode: 'cover' }} />
               <View style={styles.aiOverlay}>
-                <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold', fontFamily: theme.font}}>AI 识别: 未见异常 • {fridgeData.update}</Text>
+                <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold', fontFamily: theme.font}}>AI 识别: 实时监控中 • {fridgeData.update}</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -136,45 +170,83 @@ function DashboardScreen() {
           <Image source={{ uri: fridgeData.img }} style={{ width: '100%', height: '80%', resizeMode: 'contain' }} />
         </View>
       </Modal>
-
     </View>
   );
 }
-// ==================== 4. AI 智能库存 ====================
+// ==================== 4. AI 智能库存 (已接入后端实时请求) ====================
 function InventoryScreen() {
-  const data = [
-    { id: '1', name: '苹果 (Apple)', qty: 5, status: 'normal', days: '保鲜期剩余 5 天' },
-    { id: '2', name: '纯牛奶 (Milk)', qty: 1, status: 'warning', days: '即将过期' },
-    { id: '3', name: '菠菜 (Spinach)', qty: 2, status: 'danger', days: '已过期' },
-  ];
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // 🔌 核心：从后端拉取 /api/inventory 列表
+  const fetchInventory = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/inventory`);
+
+      // 将后端的数据映射为前端需要的格式
+      const formattedData = response.data.map(item => ({
+        id: item.id ? item.id.toString() : Math.random().toString(),
+        name: item.item_name || '未知食材',
+        qty: item.quantity || 1,
+        // 根据后端状态映射颜色，假设后端返回的是 '在库', '临期', '过期' 等枚举
+        status: item.status === '过期' ? 'danger' : (item.status === '临期' ? 'warning' : 'normal'),
+        days: item.expiry_time ? `预计过期: ${new Date(item.expiry_time).toLocaleDateString()}` : '保鲜中'
+      }));
+
+      setData(formattedData);
+    } catch (error) {
+      console.warn("库存数据拉取失败:", error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInventory();
+  }, []);
+
   return (
     <View style={{flex: 1}}>
       <LinearGradient colors={[theme.colors.bgStart, theme.colors.bgEnd]} style={StyleSheet.absoluteFill} />
       <SafeAreaView style={{flex: 1}} edges={['top', 'left', 'right']}>
-        <View style={styles.header}><Text style={styles.headerTitle}>AI 智能库存</Text></View>
-        <FlatList
-          data={data} keyExtractor={i => i.id} contentContainerStyle={{padding: 16}}
-          renderItem={({ item }) => {
-            const color = item.status === 'normal' ? theme.colors.success : (item.status === 'warning' ? theme.colors.warning : theme.colors.danger);
-            return (
-              <View style={[styles.card, {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}]}>
-                <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                  <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: color, marginRight: 12 }} />
-                  <View>
-                    <Text style={{fontSize: 16, fontWeight: 'bold', color: theme.colors.textMain, fontFamily: theme.font}}>{item.name}</Text>
-                    <Text style={{fontSize: 12, marginTop: 4, color, fontFamily: theme.font}}>{item.days}</Text>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>AI 智能库存</Text>
+          <TouchableOpacity onPress={fetchInventory}>
+             <Ionicons name="refresh" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
+
+        {loading ? (
+          <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+            <Text style={{color: theme.colors.textSub, fontFamily: theme.font}}>加载食材库中...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={data}
+            keyExtractor={i => i.id}
+            contentContainerStyle={{padding: 16}}
+            ListEmptyComponent={<Text style={{textAlign: 'center', color: theme.colors.textSub, marginTop: 40}}>空空如也，快去买点吃的吧！</Text>}
+            renderItem={({ item }) => {
+              const color = item.status === 'normal' ? theme.colors.success : (item.status === 'warning' ? theme.colors.warning : theme.colors.danger);
+              return (
+                <View style={[styles.card, {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}]}>
+                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                    <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: color, marginRight: 12 }} />
+                    <View>
+                      <Text style={{fontSize: 16, fontWeight: 'bold', color: theme.colors.textMain, fontFamily: theme.font}}>{item.name}</Text>
+                      <Text style={{fontSize: 12, marginTop: 4, color, fontFamily: theme.font}}>{item.days}</Text>
+                    </View>
                   </View>
+                  <Text style={{fontSize: 22, fontWeight: 'bold', color: theme.colors.textMain, fontFamily: theme.font}}>x{item.qty}</Text>
                 </View>
-                <Text style={{fontSize: 22, fontWeight: 'bold', color: theme.colors.textMain, fontFamily: theme.font}}>x{item.qty}</Text>
-              </View>
-            );
-          }}
-        />
+              );
+            }}
+          />
+        )}
       </SafeAreaView>
     </View>
   );
 }
-
 // ==================== 5. 历史趋势 ====================
 function StatsScreen() {
   const { width } = useWindowDimensions();
