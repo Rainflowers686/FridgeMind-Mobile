@@ -179,20 +179,43 @@ function InventoryScreen() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 🔌 核心：从后端拉取 /api/inventory 列表
+// 🔌 核心：从后端拉取 /api/inventory 列表并智能计算保鲜期
   const fetchInventory = async () => {
     try {
+      // 请求全部库存接口
       const response = await axios.get(`${API_BASE_URL}/api/inventory`);
 
-      // 将后端的数据映射为前端需要的格式
-      const formattedData = response.data.map(item => ({
-        id: item.id ? item.id.toString() : Math.random().toString(),
-        name: item.item_name || '未知食材',
-        qty: item.quantity || 1,
-        // 根据后端状态映射颜色，假设后端返回的是 '在库', '临期', '过期' 等枚举
-        status: item.status === '过期' ? 'danger' : (item.status === '临期' ? 'warning' : 'normal'),
-        days: item.expiry_time ? `预计过期: ${new Date(item.expiry_time).toLocaleDateString()}` : '保鲜中'
-      }));
+      const formattedData = response.data.map(item => {
+        let daysText = '状态未知';
+        let statusLevel = 'normal'; // 默认绿色
+
+        // 核心算法：根据过期时间戳计算剩余天数
+        if (item.expiry_time) {
+          const expiryDate = new Date(item.expiry_time);
+          const today = new Date();
+          const diffTime = expiryDate - today;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // 向上取整算天数
+
+          if (item.status === '已过期' || diffDays < 0) {
+            daysText = '已过期，请尽快清理！';
+            statusLevel = 'danger'; // 红色
+          } else if (diffDays <= 2) {
+            daysText = `即将过期 (仅剩 ${diffDays} 天)`;
+            statusLevel = 'warning'; // 橙色警告
+          } else {
+            daysText = `保鲜期剩余 ${diffDays} 天`;
+            statusLevel = 'normal'; // 绿色安全
+          }
+        }
+
+        return {
+          id: item.id ? item.id.toString() : Math.random().toString(),
+          name: item.item_name || '未知食材',
+          qty: item.quantity || 1,
+          status: statusLevel,
+          days: daysText
+        };
+      });
 
       setData(formattedData);
     } catch (error) {
