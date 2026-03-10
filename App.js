@@ -70,24 +70,25 @@ function DashboardScreen() {
     img: 'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?q=80&w=1000&auto=format&fit=crop'
   });
 
-  // 🔌 核心：从后端拉取最新传感器日志
+// 🔌 核心：精准对接后端 /api/sensor_logs 接口
   const fetchRealtimeData = async () => {
     try {
-      // 请求后端 /api/sensor_logs 接口
-      const response = await axios.get(`${API_BASE_URL}/api/sensor_logs`);
+      // 加上 ?limit=1 规范请求，虽然截图中默认返回了，但前端显式声明更严谨
+      const response = await axios.get(`${API_BASE_URL}/api/sensor_logs?limit=1`);
 
-      // 假设后端返回的是一个数组，我们取第一条（最新的一条）
       if (response.data && response.data.length > 0) {
         const latestLog = response.data[0];
 
-        setFridgeData({
+        // 转换后端的时间戳为友好的 "HH:MM" 格式
+        const logTime = new Date(latestLog.timestamp);
+        const formattedTime = logTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute:'2-digit' });
+
+        setFridgeData(prev => ({
+          ...prev, // 保留之前的兜底照片和舱门状态
           temp: latestLog.temperature != null ? latestLog.temperature.toFixed(1) : '--',
           humi: latestLog.humidity != null ? latestLog.humidity.toFixed(0) : '--',
-          door: latestLog.door_status || '已关', // 如果后端没传，默认已关
-          update: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute:'2-digit', second:'2-digit' }),
-          // 拼接图片完整地址，如果后端返回的是相对路径，需要加上 API_BASE_URL
-          img: latestLog.image_path ? `${API_BASE_URL}${latestLog.image_path}` : fridgeData.img
-        });
+          update: formattedTime // 使用真实的后端记录时间
+        }));
       }
     } catch (error) {
       console.warn("大屏数据拉取失败，请检查网络或后端服务:", error.message);
