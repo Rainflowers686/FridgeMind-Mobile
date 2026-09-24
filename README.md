@@ -1,12 +1,11 @@
 # FridgeMind Mobile
 
 *The Expo and React Native phone client for the FridgeMind student project.*
-
-
-[English](README.md) | [简体中文](README.zh-CN.md)
+![Expo](https://img.shields.io/badge/Expo-Mobile%20Client-000020?logo=expo&logoColor=white) ![React Native](https://img.shields.io/badge/React%20Native-Client-61DAFB?logo=react&logoColor=black) ![Status](https://img.shields.io/badge/Status-Student%20Project-586069)
 
 **Guide:** [Status](#project-status) · [Start the app](#start-the-app) · [Project files](#project-files)
 
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 This repository contains the Expo and React Native mobile client for the FridgeMind student project.
 
