@@ -1,6 +1,7 @@
 # FridgeMind Mobile
 
 *FridgeMind 学生项目的 Expo / React Native 移动客户端。*
+
 ![Expo](https://img.shields.io/badge/Expo-Mobile%20Client-000020?logo=expo&logoColor=white) ![React Native](https://img.shields.io/badge/React%20Native-Client-61DAFB?logo=react&logoColor=black) ![Status](https://img.shields.io/badge/Status-Student%20Project-586069)
 
 **导航：**[状态](#项目状态) · [启动](#启动) · [项目文件](#项目文件)
